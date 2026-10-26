@@ -18,4 +18,14 @@ export class AuthService {
       },
     );
   }
+
+refreshAccessToken(): Observable<void> {
+  return this.http.post<void>(
+    `${this.API_URL}/refresh`,
+    {},
+    {
+      withCredentials: true,
+    }
+  );
+}
 }

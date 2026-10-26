@@ -1,5 +1,6 @@
 package com.example.helpdesk_saas.service;
 
+import com.example.helpdesk_saas.dto.LoginResponse;
 import com.example.helpdesk_saas.exception.EmailException;
 import com.example.helpdesk_saas.exception.InvalidCredentialsException;
 import com.example.helpdesk_saas.exception.UserAlreadyExistException;
@@ -28,14 +29,16 @@ public class AuthService {
     private final StringRedisTemplate redisTemplate;
     private final MailService mailService;
     private final SecureRandom secureRandom = new SecureRandom();
+    private final RefreshTokenService refreshTokenService;
 
-    public AuthService(PasswordEncoder passwordEncoder, UserRepository userRepository, JwtService jwtService, BlackListedAccessTokenRepository blackListedAccessTokenRepository,StringRedisTemplate redisTemplate,MailService mailService) {
+    public AuthService(PasswordEncoder passwordEncoder, UserRepository userRepository, JwtService jwtService, BlackListedAccessTokenRepository blackListedAccessTokenRepository,StringRedisTemplate redisTemplate,MailService mailService,RefreshTokenService refreshTokenService) {
         this.passwordEncoder = passwordEncoder;
         this.userRepository = userRepository;
         this.jwtService = jwtService;
         this.blackListedAccessTokenRepository = blackListedAccessTokenRepository;
         this.redisTemplate = redisTemplate;
         this.mailService= mailService;
+        this.refreshTokenService= refreshTokenService;
     }
 
     public String registerUser(String name, String email, String password){
@@ -53,7 +56,7 @@ public class AuthService {
 
 
 
-    public String loginUser(String email, String password){
+    public LoginResponse loginUser(String email, String password){
         Optional<User> optionalUser = userRepository.findByEmail(email);
         if(optionalUser.isEmpty()){
             throw new UserNotFoundException("Email id not registered. Please register first.");
@@ -62,11 +65,14 @@ public class AuthService {
         if(!passwordEncoder.matches(password,user.getPassword())){
             throw new InvalidCredentialsException("Invalid Credentials");
         }
-
-        return jwtService.generateToken(
+        LoginResponse response = new LoginResponse();
+        response.setJwtToken(jwtService.generateToken(
                 email
-        );
+        ));
+        response.setRefreshToken(refreshTokenService.createRefreshToken(email).getRefreshTokenHash());
+        return response;
     }
+
 
     public void logout(String token){
         Optional<BlackListedAccessToken> optionalToken = blackListedAccessTokenRepository.findByToken(token);

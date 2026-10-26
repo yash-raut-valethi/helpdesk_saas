@@ -168,6 +168,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 || "/auth/login".equals(path)
                 || "/auth/register".equals(path)
                 || "/auth/forgot-password".equals(path)
-                || "/auth/forgot-password/otp/verify".equals(path);
+                || "/auth/forgot-password/otp/verify".equals(path)
+                || "/auth/refresh".equals(path)
+       ;
     }
 }
