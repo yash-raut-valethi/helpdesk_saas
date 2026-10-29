@@ -56,23 +56,36 @@ public class AuthService {
 
 
 
-    public LoginResponse loginUser(String email, String password){
+    public LoginResponse loginUser(String email, String password) {
+
         Optional<User> optionalUser = userRepository.findByEmail(email);
-        if(optionalUser.isEmpty()){
-            throw new UserNotFoundException("Email id not registered. Please register first.");
+
+        if (optionalUser.isEmpty()) {
+            throw new UserNotFoundException(
+                    "Email id not registered. Please register first."
+            );
         }
+
         User user = optionalUser.get();
-        if(!passwordEncoder.matches(password,user.getPassword())){
+
+        if (!passwordEncoder.matches(password, user.getPassword())) {
             throw new InvalidCredentialsException("Invalid Credentials");
         }
+
         LoginResponse response = new LoginResponse();
-        response.setJwtToken(jwtService.generateToken(
-                email
-        ));
-        response.setRefreshToken(refreshTokenService.createRefreshToken(email).getRefreshTokenHash());
+
+        response.setJwtToken(
+                jwtService.generateToken(email)
+        );
+
+        // Raw refresh token goes into the browser cookie.
+        // Only its SHA-256 hash is stored in the database.
+        response.setRefreshToken(
+                refreshTokenService.createRefreshToken(email)
+        );
+
         return response;
     }
-
 
     public void logout(String token){
         Optional<BlackListedAccessToken> optionalToken = blackListedAccessTokenRepository.findByToken(token);
@@ -105,14 +118,19 @@ public class AuthService {
 
     }
 
-    public String verifyLoginOTP(String email, String otp){
+    public LoginResponse verifyLoginOTP(String email, String otp){
        String storedOtp = redisTemplate.opsForValue().get(email);
         if(storedOtp==null || !storedOtp.equals(otp)){
             throw new InvalidCredentialsException("Invalid otp. Please try again.");
         }
-        return jwtService.generateToken(
+        String accessToken = jwtService.generateToken(
                 email
         );
+        String refreshToken = refreshTokenService.createRefreshToken(email);
+        LoginResponse response = new LoginResponse();
+        response.setJwtToken(accessToken);
+        response.setRefreshToken(refreshToken);
+        return response;
     }
 
 

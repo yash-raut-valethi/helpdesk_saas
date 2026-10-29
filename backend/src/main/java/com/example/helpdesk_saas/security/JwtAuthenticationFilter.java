@@ -1,25 +1,31 @@
 package com.example.helpdesk_saas.security;
 
-import com.example.helpdesk_saas.models.BlackListedAccessToken;
 import com.example.helpdesk_saas.models.User;
 import com.example.helpdesk_saas.repository.BlackListedAccessTokenRepository;
 import com.example.helpdesk_saas.repository.UserRepository;
 
 import io.jsonwebtoken.JwtException;
+
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.web.servlet.HandlerExceptionResolver;
+
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+
+import org.springframework.web.servlet.HandlerExceptionResolver;
 
 import java.io.IOException;
 import java.util.List;
@@ -30,14 +36,19 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtService jwtService;
     private final UserRepository userRepository;
     private final BlackListedAccessTokenRepository blacklistRepository;
+    private final HandlerExceptionResolver exceptionResolver;
 
     public JwtAuthenticationFilter(
             JwtService jwtService,
             UserRepository userRepository,
-            BlackListedAccessTokenRepository blacklistRepository) {
+            BlackListedAccessTokenRepository blacklistRepository,
+            @Qualifier("handlerExceptionResolver")
+            HandlerExceptionResolver exceptionResolver) {
+
         this.jwtService = jwtService;
         this.userRepository = userRepository;
         this.blacklistRepository = blacklistRepository;
+        this.exceptionResolver = exceptionResolver;
     }
 
     @Override
@@ -46,12 +57,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             HttpServletResponse response,
             FilterChain filterChain)
             throws ServletException, IOException {
-        System.out.println(
-                "JWT FILTER EXECUTED: "
-                        + request.getMethod()
-                        + " "
-                        + request.getRequestURI()
-        );
 
         String token = null;
 
@@ -64,10 +69,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         // 2. If absent, check the cookie.
         if (token == null || token.isBlank()) {
+
             Cookie[] cookies = request.getCookies();
 
             if (cookies != null) {
                 for (Cookie cookie : cookies) {
+
                     if ("accessToken".equals(cookie.getName())) {
                         token = cookie.getValue();
                         break;
@@ -83,20 +90,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         try {
+
             // 4. Check revocation regardless of token source.
             boolean blacklisted =
                     blacklistRepository.findByToken(token).isPresent();
 
-            System.out.println("Token blacklisted: " + blacklisted);
-
             if (blacklisted) {
-                System.out.println("Rejecting revoked token with 401");
                 rejectToken(response);
                 return;
             }
 
-            // 5. Validate the JWT and identify the user.
-            // These methods must validate the signature and claims.
+            // 5. Validate JWT and identify user.
             String email = jwtService.extractEmail(token);
 
             if (email == null || email.isBlank()) {
@@ -113,16 +117,19 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 return;
             }
 
-            // 6. Establish authentication if not already present.
+            // 6. Establish authentication.
             Authentication existingAuth =
                     SecurityContextHolder.getContext().getAuthentication();
 
             if (existingAuth == null) {
+
                 UsernamePasswordAuthenticationToken authentication =
                         new UsernamePasswordAuthenticationToken(
                                 user,
                                 null,
-                                List.of(new SimpleGrantedAuthority("ROLE_USER"))
+                                List.of(
+                                        new SimpleGrantedAuthority("ROLE_USER")
+                                )
                         );
 
                 authentication.setDetails(
@@ -134,16 +141,29 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                         .setAuthentication(authentication);
             }
 
-        } catch (JwtException
-                 | IllegalArgumentException
-                 | UsernameNotFoundException e) {
+        }  catch (JwtException
+         | IllegalArgumentException
+         | UsernameNotFoundException e) {
 
-            SecurityContextHolder.clearContext();
-            rejectToken(response);
-            return;
-        }
+        SecurityContextHolder.clearContext();
+        rejectToken(response);
+        return;
 
-        // 7. Token is valid and not revoked.
+    } catch (Exception e) {
+
+        SecurityContextHolder.clearContext();
+
+        exceptionResolver.resolveException(
+                request,
+                response,
+                null,
+                e
+        );
+
+        return;
+    }
+
+        // 7. Token valid and not revoked.
         filterChain.doFilter(request, response);
     }
 
@@ -154,14 +174,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
         response.setContentType("application/json");
+        response.setCharacterEncoding("UTF-8");
+
         response.getWriter().write(
                 "{\"error\":\"Invalid, expired, or revoked token\"}"
         );
+
         response.getWriter().flush();
     }
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
+
         String path = request.getServletPath();
 
         return "OPTIONS".equalsIgnoreCase(request.getMethod())
@@ -170,6 +194,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 || "/auth/forgot-password".equals(path)
                 || "/auth/forgot-password/otp/verify".equals(path)
                 || "/auth/refresh".equals(path)
-       ;
+                || "/auth/logout".equals(path);
     }
 }

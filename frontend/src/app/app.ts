@@ -6,6 +6,9 @@ import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { filter, finalize } from 'rxjs';
 import { AuthService } from './services/auth.service';
 import { ProfileService } from './services/profile.service';
+import { ToastComponent } from './components/toast/toast.component';
+import { resetSessionExpirationState } from './services/auth.interceptor';
+import { ToastService } from './services/toast.service';
 
 type AuthScreen = 'login' | 'register' | 'email' | 'otp' | 'reset' | 'complete';
 const PASSWORD_PATTERN = /^(?=.*[A-Z].*[A-Z])(?=.*[!@#$&*])(?=.*[0-9].*[0-9])(?=.*[a-z].*[a-z].*[a-z]).{8,}$/;
@@ -19,10 +22,11 @@ function matchingPasswords(control: AbstractControl): ValidationErrors | null {
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, RouterOutlet],
+  imports: [CommonModule, ReactiveFormsModule, RouterOutlet, ToastComponent],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
+
 export class App implements OnDestroy {
   private readonly fb = inject(FormBuilder);
   private readonly http = inject(HttpClient);
@@ -35,6 +39,7 @@ export class App implements OnDestroy {
   private redirectTimeout?: ReturnType<typeof setTimeout>;
   private otpExpiresAt = 0;
   private lastRouteUrl = this.router.url;
+  private readonly toastService = inject(ToastService);
 
   screen: AuthScreen = 'login';
   isLoading = false;
@@ -58,38 +63,62 @@ export class App implements OnDestroy {
     password: ['', [Validators.required, Validators.pattern(PASSWORD_PATTERN)]],
   });
   emailForm = this.fb.group({ email: ['', [Validators.required, Validators.email]] });
-  resetForm = this.fb.group({
-    password: ['', [Validators.required, Validators.pattern(PASSWORD_PATTERN)]],
-    confirmPassword: ['', Validators.required],
-  }, { validators: matchingPasswords });
+  resetForm = this.fb.group(
+    {
+      password: ['', [Validators.required, Validators.pattern(PASSWORD_PATTERN)]],
+      confirmPassword: ['', Validators.required],
+    },
+    { validators: matchingPasswords },
+  );
 
   constructor() {
-    this.router.events.pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd))
-        .subscribe(event => {
-          const nextUrl = event.urlAfterRedirects;
-          // Do not reset an in-progress OTP/password recovery flow just because
-          // Angular emits a navigation event for the already-active root route.
-          // Only reset when actually returning from the dashboard to sign in.
-          if ((nextUrl === '/' || nextUrl === '') && this.lastRouteUrl.startsWith('/home')) {
-            this.resetAuthScreen();
-          }
-          this.lastRouteUrl = nextUrl;
-        });
+    this.router.events
+      .pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd))
+      .subscribe((event) => {
+        const nextUrl = event.urlAfterRedirects;
+        // Do not reset an in-progress OTP/password recovery flow just because
+        // Angular emits a navigation event for the already-active root route.
+        // Only reset when actually returning from the dashboard to sign in.
+        if ((nextUrl === '/' || nextUrl === '') && this.lastRouteUrl.startsWith('/home')) {
+          this.resetAuthScreen();
+        }
+        this.lastRouteUrl = nextUrl;
+      });
   }
 
-  get isHomePage(): boolean { return this.router.url.startsWith('/home'); }
-  get loginEmail() { return this.loginForm.controls.email; }
-  get loginPassword() { return this.loginForm.controls.password; }
-  get registerName() { return this.registerForm.controls.name; }
-  get registerEmail() { return this.registerForm.controls.email; }
-  get registerPassword() { return this.registerForm.controls.password; }
-  get otpValue(): string { return this.otpDigits.join(''); }
+  get isHomePage(): boolean {
+    return this.router.url.startsWith('/home');
+  }
+  get loginEmail() {
+    return this.loginForm.controls.email;
+  }
+  get loginPassword() {
+    return this.loginForm.controls.password;
+  }
+  get registerName() {
+    return this.registerForm.controls.name;
+  }
+  get registerEmail() {
+    return this.registerForm.controls.email;
+  }
+  get registerPassword() {
+    return this.registerForm.controls.password;
+  }
+  get otpValue(): string {
+    return this.otpDigits.join('');
+  }
   get formattedTime(): string {
-    return `${Math.floor(this.remainingSeconds / 60).toString().padStart(2, '0')}:${(this.remainingSeconds % 60).toString().padStart(2, '0')}`;
+    return `${Math.floor(this.remainingSeconds / 60)
+      .toString()
+      .padStart(2, '0')}:${(this.remainingSeconds % 60).toString().padStart(2, '0')}`;
   }
 
-  showRegister(): void { this.setScreen('register'); }
-  showLogin(): void { this.setScreen('login'); }
+  showRegister(): void {
+    this.setScreen('register');
+  }
+  showLogin(): void {
+    this.setScreen('login');
+  }
   showForgotPassword(): void {
     this.emailForm.patchValue({ email: this.loginEmail.value || '' });
     this.setScreen('email');
@@ -103,38 +132,65 @@ export class App implements OnDestroy {
 
   login(): void {
     this.clearMessages();
-    if (this.loginForm.invalid || this.isLoading) { this.loginForm.markAllAsTouched(); return; }
+    if (this.loginForm.invalid || this.isLoading) {
+      this.loginForm.markAllAsTouched();
+      return;
+    }
     const credentials = this.loginForm.getRawValue();
     this.isLoading = true;
-    this.http.post(`${this.API_URL}/login`, credentials, { responseType: 'text', withCredentials: true })
-        .pipe(finalize(() => { this.isLoading = false; this.cdr.detectChanges(); }))
-        .subscribe({
-          next: () => { this.storeSession(credentials.email || ''); this.loginForm.reset(); void this.router.navigateByUrl('/home'); },
-          error: (error: HttpErrorResponse) => this.displayError(error, 'Login failed. Check your credentials.'),
-        });
+    this.http
+      .post(`${this.API_URL}/login`, credentials, { responseType: 'text', withCredentials: true })
+      .pipe(
+        finalize(() => {
+          this.isLoading = false;
+          this.cdr.detectChanges();
+        }),
+      )
+      .subscribe({
+        next: () => {
+          this.storeSession(credentials.email || '');
+          this.loginForm.reset();
+          void this.router.navigateByUrl('/home');
+        },
+        error: (error: HttpErrorResponse) =>
+          this.displayError(error, 'Login failed. Check your credentials.'),
+      });
   }
 
   register(): void {
     this.clearMessages();
-    if (this.registerForm.invalid || this.isLoading) { this.registerForm.markAllAsTouched(); return; }
+    if (this.registerForm.invalid || this.isLoading) {
+      this.registerForm.markAllAsTouched();
+      return;
+    }
     this.isLoading = true;
-    this.http.post(`${this.API_URL}/register`, this.registerForm.getRawValue(), { responseType: 'text' })
-        .pipe(finalize(() => { this.isLoading = false; this.cdr.detectChanges(); }))
-        .subscribe({
-          next: () => {
-            const email = this.registerEmail.value || '';
-            this.loginForm.patchValue({ email });
-            this.registerForm.reset();
-            this.setScreen('login');
-            this.successMessage = 'Account created successfully. You can now sign in.';
-          },
-          error: (error: HttpErrorResponse) => this.displayError(error, 'Registration failed. Please try again.'),
-        });
+    this.http
+      .post(`${this.API_URL}/register`, this.registerForm.getRawValue(), { responseType: 'text' })
+      .pipe(
+        finalize(() => {
+          this.isLoading = false;
+          this.cdr.detectChanges();
+        }),
+      )
+      .subscribe({
+        next: () => {
+          const email = this.registerEmail.value || '';
+          this.loginForm.patchValue({ email });
+          this.registerForm.reset();
+          this.setScreen('login');
+          this.successMessage = 'Account created successfully. You can now sign in.';
+        },
+        error: (error: HttpErrorResponse) =>
+          this.displayError(error, 'Registration failed. Please try again.'),
+      });
   }
 
   sendOtp(): void {
     this.clearMessages();
-    if (this.emailForm.invalid || this.isLoading) { this.emailForm.markAllAsTouched(); return; }
+    if (this.emailForm.invalid || this.isLoading) {
+      this.emailForm.markAllAsTouched();
+      return;
+    }
     this.requestOtp(false);
   }
 
@@ -147,19 +203,28 @@ export class App implements OnDestroy {
   private requestOtp(resend: boolean): void {
     const email = (this.emailForm.controls.email.value || '').trim();
     this.isLoading = true;
-    this.http.post(`${this.API_URL}/forgot-password`, { email }, { responseType: 'text' })
-        .pipe(finalize(() => { this.isLoading = false; this.cdr.detectChanges(); }))
-        .subscribe({
-          next: () => {
-            this.verifiedEmail = email;
-            this.otpDigits = ['', '', '', '', '', ''];
-            this.screen = 'otp';
-            this.startTimer();
-            this.successMessage = resend ? 'A new verification code has been sent.' : 'Verification code sent. Check your inbox.';
-            this.cdr.detectChanges();
-          },
-          error: (error: HttpErrorResponse) => this.displayError(error, 'Could not send the code. Please try again.'),
-        });
+    this.http
+      .post(`${this.API_URL}/forgot-password`, { email }, { responseType: 'text' })
+      .pipe(
+        finalize(() => {
+          this.isLoading = false;
+          this.cdr.detectChanges();
+        }),
+      )
+      .subscribe({
+        next: () => {
+          this.verifiedEmail = email;
+          this.otpDigits = ['', '', '', '', '', ''];
+          this.screen = 'otp';
+          this.startTimer();
+          this.successMessage = resend
+            ? 'A new verification code has been sent.'
+            : 'Verification code sent. Check your inbox.';
+          this.cdr.detectChanges();
+        },
+        error: (error: HttpErrorResponse) =>
+          this.displayError(error, 'Could not send the code. Please try again.'),
+      });
   }
 
   onOtpInput(event: Event, index: number): void {
@@ -187,7 +252,7 @@ export class App implements OnDestroy {
   }
   private fillOtp(value: string, start: number): void {
     const digits = value.replace(/\D/g, '').slice(0, 6 - start);
-    [...digits].forEach((digit, offset) => this.otpDigits[start + offset] = digit);
+    [...digits].forEach((digit, offset) => (this.otpDigits[start + offset] = digit));
     this.cdr.detectChanges();
     this.focusOtp(Math.min(5, start + digits.length));
   }
@@ -206,34 +271,58 @@ export class App implements OnDestroy {
       return;
     }
     this.isLoading = true;
-    this.http.post(`${this.API_URL}/forgot-password/otp/verify`,
+    this.http
+      .post(
+        `${this.API_URL}/forgot-password/otp/verify`,
         { email: this.verifiedEmail, otp: this.otpValue },
-        { responseType: 'text', withCredentials: true })
-        .pipe(finalize(() => { this.isLoading = false; this.cdr.detectChanges(); }))
-        .subscribe({
-          next: () => {
-            this.storeSession(this.verifiedEmail);
-            this.stopTimer();
-            this.resetForm.reset();
-            this.setScreen('reset');
-          },
-          error: (error: HttpErrorResponse) => this.displayError(error, 'Invalid or expired code. Please try again.'),
-        });
+        { responseType: 'text', withCredentials: true },
+      )
+      .pipe(
+        finalize(() => {
+          this.isLoading = false;
+          this.cdr.detectChanges();
+        }),
+      )
+      .subscribe({
+        next: () => {
+          this.storeSession(this.verifiedEmail);
+          this.stopTimer();
+          this.resetForm.reset();
+          this.setScreen('reset');
+        },
+        error: (error: HttpErrorResponse) =>
+          this.displayError(error, 'Invalid or expired code. Please try again.'),
+      });
   }
 
-  skipReset(): void { this.complete('You are signed in. Redirecting to Dashboard...'); }
+  skipReset(): void {
+    this.complete('You are signed in. Redirecting to Dashboard...');
+  }
 
   submitReset(): void {
     this.clearMessages();
-    if (this.resetForm.invalid || this.isLoading) { this.resetForm.markAllAsTouched(); return; }
+    if (this.resetForm.invalid || this.isLoading) {
+      this.resetForm.markAllAsTouched();
+      return;
+    }
     const password = this.resetForm.controls.password.value || '';
     this.isLoading = true;
-    this.profileService.resetPassword(password)
-        .pipe(finalize(() => { this.isLoading = false; this.cdr.detectChanges(); }))
-        .subscribe({
-          next: () => { this.resetForm.reset(); this.complete('Password Reset Successful. Redirecting to Dashboard...'); },
-          error: (error: HttpErrorResponse) => this.displayError(error, 'Could not reset password. Please try again.'),
-        });
+    this.profileService
+      .resetPassword(password)
+      .pipe(
+        finalize(() => {
+          this.isLoading = false;
+          this.cdr.detectChanges();
+        }),
+      )
+      .subscribe({
+        next: () => {
+          this.resetForm.reset();
+          this.complete('Password Reset Successful. Redirecting to Dashboard...');
+        },
+        error: (error: HttpErrorResponse) =>
+          this.displayError(error, 'Could not reset password. Please try again.'),
+      });
   }
 
   private complete(message: string): void {
@@ -256,20 +345,36 @@ export class App implements OnDestroy {
     this.countdownInterval = undefined;
   }
   private storeSession(email: string): void {
+    resetSessionExpirationState();
+
     localStorage.setItem('isLoggedIn', 'true');
     localStorage.setItem('user', JSON.stringify({ email }));
   }
   logout(): void {
     if (this.isLoggingOut) return;
     this.isLoggingOut = true;
-    this.authService.logout().pipe(finalize(() => {
-      localStorage.removeItem('isLoggedIn');
-      localStorage.removeItem('user');
-      this.isLoggingOut = false;
-    })).subscribe({
-      next: () => void this.router.navigateByUrl('/'),
-      error: () => void this.router.navigateByUrl('/'),
-    });
+    this.authService
+      .logout()
+      .pipe(
+        finalize(() => {
+          localStorage.removeItem('isLoggedIn');
+          localStorage.removeItem('user');
+          this.isLoggingOut = false;
+        }),
+      )
+      .subscribe({
+        next: () => {
+          void this.router.navigateByUrl('/').then((navigated) => {
+            if (navigated) {
+              this.toastService.success(
+                'Logged out successfully',
+                'You have been securely logged out of your HelpDesk account.',
+              );
+            }
+          });
+        },
+        error: () => void this.router.navigateByUrl('/'),
+      });
   }
   private resetAuthScreen(): void {
     this.stopTimer();
@@ -285,16 +390,77 @@ export class App implements OnDestroy {
     this.clearMessages();
     this.cdr.detectChanges();
   }
-  private clearMessages(): void { this.errorMessage = ''; this.successMessage = ''; }
-  private displayError(error: HttpErrorResponse, fallback: string): void {
-    const body = error.error;
-    this.errorMessage = typeof body === 'string' && body.trim()
-        ? body.replace(/^Error:\s*/i, '')
-        : (typeof body === 'object' && body ? body.message || body.detail || body.defaultMessage || fallback : fallback);
+  private clearMessages(): void {
+    this.errorMessage = '';
+    this.successMessage = '';
+  }
+  private displayError(
+      error: HttpErrorResponse,
+      fallback: string,
+  ): void {
+    // Backend unavailable or network connection failure.
+    if (error.status === 0) {
+      this.errorMessage =
+          'Unable to connect to the server. Please try again later.';
+    }
+
+    // Internal server failure.
+    else if (error.status >= 500) {
+      this.errorMessage =
+          error.status === 503
+              ? 'Service temporarily unavailable. Please try again in a few moments.'
+              : 'Something went wrong on our server. Please try again later.';
+    }
+
+    // Authentication failure.
+    else if (error.status === 401) {
+      this.errorMessage =
+          'Authentication failed. Please sign in again.';
+    }
+
+    // Authorization failure.
+    else if (error.status === 403) {
+      this.errorMessage =
+          'You do not have permission to perform this action.';
+    }
+
+    // Other backend errors.
+    else {
+      const body = error.error;
+
+      let message = fallback;
+
+      if (typeof body === 'string' && body.trim()) {
+        try {
+          const parsed = JSON.parse(body);
+          message =
+              parsed.message ||
+              parsed.error ||
+              fallback;
+        } catch {
+          message = body.replace(/^Error:\s*/i, '');
+        }
+      } else if (body && typeof body === 'object') {
+        message =
+            body.message ||
+            body.detail ||
+            fallback;
+      }
+
+      this.errorMessage = message;
+    }
+
     this.cdr.detectChanges();
   }
+
   ngOnDestroy(): void {
     this.stopTimer();
-    if (this.redirectTimeout) clearTimeout(this.redirectTimeout);
+
+    if (this.redirectTimeout) {
+      clearTimeout(this.redirectTimeout);
+    }
   }
+
+
+
 }

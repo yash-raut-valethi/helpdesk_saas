@@ -1,0 +1,106 @@
+
+@if (toastService.currentToast(); as toast) {
+<div
+  class="toast-container"
+  role="status"
+  aria-live="polite"
+  aria-atomic="true"
+>
+  <div
+    class="toast-card"
+    [class.toast-success]="toast.type === 'success'"
+    [class.toast-error]="toast.type === 'error'"
+    [class.toast-warning]="toast.type === 'warning'"
+    [class.toast-info]="toast.type === 'info'"
+  >
+    <div class="toast-icon">
+      @switch (toast.type) {
+      @case ('success') {
+      <span>✓</span>
+      }
+      @case ('error') {
+      <span>!</span>
+      }
+      @case ('warning') {
+      <span>!</span>
+      }
+      @default {
+      <span>i</span>
+      }
+      }
+    </div>
+
+    <div class="toast-content">
+      <div class="toast-title">
+        {{ toast.title }}
+      </div>
+
+      <div class="toast-message">
+        {{ toast.message }}
+      </div>
+    </div>
+
+    <button
+      type="button"
+      class="toast-close"
+      aria-label="Dismiss notification"
+      (click)="dismiss()"
+    >
+      &times;
+    </button>
+  </div>
+</div>
+}
+
+@if (toastService.currentToast(); as toast) {
+<div
+  class="toast-container"
+  role="status"
+  aria-live="polite"
+  aria-atomic="true"
+>
+  <div
+    class="toast-card"
+    [class.toast-success]="toast.type === 'success'"
+    [class.toast-error]="toast.type === 'error'"
+    [class.toast-warning]="toast.type === 'warning'"
+    [class.toast-info]="toast.type === 'info'"
+  >
+    <div class="toast-icon">
+      @switch (toast.type) {
+      @case ('success') {
+      <span>✓</span>
+      }
+      @case ('error') {
+      <span>!</span>
+      }
+      @case ('warning') {
+      <span>!</span>
+      }
+      @default {
+      <span>i</span>
+      }
+      }
+    </div>
+
+    <div class="toast-content">
+      <div class="toast-title">
+        {{ toast.title }}
+      </div>
+
+      <div class="toast-message">
+        {{ toast.message }}
+      </div>
+    </div>
+
+    <button
+      type="button"
+      class="toast-close"
+      aria-label="Dismiss notification"
+      (click)="dismiss()"
+    >
+      &times;
+    </button>
+  </div>
+</div>
+}

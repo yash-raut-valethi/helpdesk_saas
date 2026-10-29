@@ -1,3 +1,4 @@
+
 package com.example.helpdesk_saas.service;
 
 import com.example.helpdesk_saas.dto.TokenRefreshResponseDTO;
@@ -17,59 +18,74 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.HexFormat;
-import java.util.Optional;
-import java.util.UUID;
 
 @Service
 public class RefreshTokenService {
-    @Value("${jwt.refreshExpirationMs}")
-    private Long refreshTokenDurationMs;
+
+    @Value("${jwt.refresh-expiration-ms}")
+    private long refreshTokenDurationMs;
 
     private final RefreshTokenRepository refreshTokenRepository;
     private final UserRepository userRepository;
     private final JwtService jwtService;
+
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
-    public RefreshTokenService(RefreshTokenRepository repo, UserRepository userRepo, JwtService jwtService) {
-        this.refreshTokenRepository = repo;
-        this.userRepository = userRepo;
+    public RefreshTokenService(
+            RefreshTokenRepository refreshTokenRepository,
+            UserRepository userRepository,
+            JwtService jwtService) {
+
+        this.refreshTokenRepository = refreshTokenRepository;
+        this.userRepository = userRepository;
         this.jwtService = jwtService;
     }
 
-    public RefreshToken createRefreshToken(String email) {
-        var token = new RefreshToken();
-        Optional<User> optionalUser = userRepository.findByEmail(email);
-        if(optionalUser.isEmpty()){
-            throw new UserNotFoundException("No user found in current session");
-        }
-        token.setUser(optionalUser.get());
-        token.setExpiryDate(Instant.now().plusMillis(refreshTokenDurationMs));
-        token.setRefreshTokenHash(UUID.randomUUID().toString());
-        return refreshTokenRepository.save(token);
+    // Returns the raw token for the HttpOnly cookie.
+    // Only its SHA-256 hash is stored in the database.
+    @Transactional
+    public String createRefreshToken(String email) {
+
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() ->
+                        new UserNotFoundException(
+                                "No user found in current session"
+                        )
+                );
+
+        String rawToken = generateSecureRefreshToken();
+
+        RefreshToken token = new RefreshToken();
+        token.setUser(user);
+        token.setRefreshTokenHash(hashToken(rawToken));
+        token.setExpiryDate(
+                Instant.now().plusMillis(refreshTokenDurationMs)
+        );
+        token.setRevoked(false);
+
+        refreshTokenRepository.save(token);
+
+        return rawToken;
     }
 
     public boolean isTokenExpired(RefreshToken token) {
-        return token.getExpiryDate().isBefore(Instant.now());
+        return !token.getExpiryDate().isAfter(Instant.now());
     }
 
     @Transactional
     public TokenRefreshResponseDTO refreshAccessToken(String requestToken) {
 
-        // 1. Validate the incoming token
         if (requestToken == null || requestToken.isBlank()) {
             throw new InvalidRefreshTokenException(
                     "Refresh token is required."
             );
         }
 
-        // 2. Hash the supplied token
         String refreshTokenHash = hashToken(requestToken);
 
-        // 3. Find and lock the token record
         RefreshToken existingToken = refreshTokenRepository
                 .findByRefreshTokenHashForUpdate(refreshTokenHash)
                 .orElseThrow(() ->
@@ -78,22 +94,18 @@ public class RefreshTokenService {
                         )
                 );
 
-        // 4. Reject revoked or previously used tokens
         if (existingToken.isRevoked()) {
             throw new InvalidRefreshTokenException(
                     "Refresh token has already been revoked."
             );
         }
 
-        // 5. Validate expiration
-        if (!existingToken.getExpiryDate().isAfter(Instant.now())) {
-            System.out.println("Refresh Token expired");
+        if (isTokenExpired(existingToken)) {
             throw new ExpiredRefreshTokenException(
                     "Refresh token expired. Please login again."
             );
         }
 
-        // 6. Validate associated user
         User user = existingToken.getUser();
 
         if (user == null) {
@@ -102,43 +114,35 @@ public class RefreshTokenService {
             );
         }
 
-        // 7. Generate a new secure refresh token
         String newRefreshToken = generateSecureRefreshToken();
 
-        // 8. Revoke the old token
+        // Revoke the old refresh token.
         existingToken.setRevoked(true);
 
-        // 9. Create a new refresh-token record
         RefreshToken replacementToken = new RefreshToken();
-
-        replacementToken.setRefreshTokenHash(hashToken(newRefreshToken));
+        replacementToken.setRefreshTokenHash(
+                hashToken(newRefreshToken)
+        );
         replacementToken.setUser(user);
         replacementToken.setExpiryDate(
-                Instant.now().plus(Duration.ofDays(7))
+                Instant.now().plusMillis(refreshTokenDurationMs)
         );
         replacementToken.setRevoked(false);
 
-        // 10. Persist changes atomically
         refreshTokenRepository.save(existingToken);
         refreshTokenRepository.save(replacementToken);
 
-        // 11. Generate a new access JWT
-        System.out.println("Generating New /Refreshing access token");
         String newAccessToken = jwtService.generateToken(
                 user.getEmail()
         );
-        System.out.println("Generated new access token");
 
-        // 12. Return both credentials
         return new TokenRefreshResponseDTO(
                 newAccessToken,
                 newRefreshToken
         );
     }
 
-
     private String hashToken(String token) {
-
         try {
             MessageDigest digest =
                     MessageDigest.getInstance("SHA-256");

@@ -6,6 +6,7 @@ import { Router } from '@angular/router';
 import { finalize } from 'rxjs';
 import { AuthService } from './services/auth.service';
 import { ProfileService, ProfileResponse } from './services/profile.service';
+import { ToastService } from './services/toast.service';
 
 interface Slide {
   image: string;
@@ -29,6 +30,7 @@ interface ProfileField {
 export class HomeComponent implements OnInit, OnDestroy {
   private readonly fb = inject(FormBuilder);
   private readonly authService = inject(AuthService);
+  private readonly toastService = inject(ToastService);
 
   currentSlide = 0;
   isProfileOpen = false;
@@ -361,7 +363,12 @@ export class HomeComponent implements OnInit, OnDestroy {
       )
       .subscribe({
         next: () => {
-          void this.router.navigateByUrl('/');
+          void this.router.navigateByUrl('/').then(() => {
+            this.toastService.success(
+              'Logged out successfully',
+              'You have been securely logged out of your HelpDesk account.',
+            );
+          });
         },
         error: (error: HttpErrorResponse) => {
           console.error('Backend logout request failed:', error);
@@ -373,7 +380,11 @@ export class HomeComponent implements OnInit, OnDestroy {
               ? 'The server could not be reached. You have been signed out locally.'
               : 'Your local session has been cleared, but the server could not confirm logout.';
 
-          void this.router.navigateByUrl('/');
+          const message = this.logoutError;
+
+          void this.router.navigateByUrl('/').then(() => {
+            this.toastService.warning('Logout could not be confirmed', message);
+          });
         },
       });
   }

@@ -8,6 +8,7 @@ import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
@@ -23,6 +24,10 @@ public class AuthController {
 
     private final AuthService authService;
     private final RefreshTokenService refreshTokenService;
+    @Value("${jwt.expiry-ms}")
+    private long accessTokenExpiration;
+    @Value("${jwt.refresh-expiration-ms}")
+    private long refreshTokenExpiration;
 
     public AuthController(AuthService authService, RefreshTokenService refreshTokenService) {
         this.authService = authService;
@@ -45,7 +50,7 @@ public class AuthController {
                 .httpOnly(true)
                 .secure(false)
                 .path("/")
-                .maxAge(Duration.ofDays(1))
+                .maxAge(Duration.ofMillis(accessTokenExpiration))
                 .sameSite("Lax")
                 .build();
 
@@ -53,7 +58,7 @@ public class AuthController {
                 .httpOnly(true)
                 .secure(false)
                 .path("/")
-                .maxAge(Duration.ofDays(1))
+                .maxAge(Duration.ofMillis(refreshTokenExpiration))
                 .sameSite("Lax")
                 .build();
 
@@ -80,8 +85,18 @@ public class AuthController {
         }
 
         // Clear the browser cookie.
-        ResponseCookie clearCookie = ResponseCookie
+        ResponseCookie clearAccessTokenCookie = ResponseCookie
                 .from("accessToken", "")
+                .httpOnly(true)
+                .secure(false)
+                .path("/")
+                .sameSite("Lax")
+                .maxAge(Duration.ZERO)
+                .build();
+
+
+        ResponseCookie clearRefreshCookie = ResponseCookie
+                .from("refreshToken", "")
                 .httpOnly(true)
                 .secure(false)
                 .path("/")
@@ -91,7 +106,12 @@ public class AuthController {
 
         response.addHeader(
                 HttpHeaders.SET_COOKIE,
-                clearCookie.toString()
+                clearAccessTokenCookie.toString()
+        );
+
+        response.addHeader(
+                HttpHeaders.SET_COOKIE,
+                clearRefreshCookie.toString()
         );
         return ResponseEntity.noContent().build();
     }
@@ -106,17 +126,27 @@ public class AuthController {
 
     @PostMapping("/forgot-password/otp/verify")
     public ResponseEntity<String> verifyLoginOTP(@RequestBody ForgotPasswordOTPRequestDTO requestDTO, HttpServletResponse response){
-        String token = authService.verifyLoginOTP(requestDTO.getEmail(), requestDTO.getOtp());
+        LoginResponse token = authService.verifyLoginOTP(requestDTO.getEmail(), requestDTO.getOtp());
 
-        ResponseCookie cookie = ResponseCookie.from("accessToken", token)
+        ResponseCookie accessCookie = ResponseCookie.from("accessToken", token.getJwtToken())
                 .httpOnly(true)
                 .secure(false)
                 .path("/")
-                .maxAge(Duration.ofDays(1))
+                .maxAge(Duration.ofMillis(accessTokenExpiration))
                 .sameSite("Lax")
                 .build();
 
-        response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
+        ResponseCookie refreshCookie = ResponseCookie.from("refreshToken", token.getRefreshToken())
+                .httpOnly(true)
+                .secure(false)
+                .path("/")
+                .maxAge(Duration.ofMillis(refreshTokenExpiration))
+                .sameSite("Lax")
+                .build();
+
+
+        response.addHeader(HttpHeaders.SET_COOKIE, accessCookie.toString());
+        response.addHeader(HttpHeaders.SET_COOKIE, refreshCookie.toString());
         return ResponseEntity.ok("Login Successful");
     }
 
@@ -129,16 +159,17 @@ public class AuthController {
                 .httpOnly(true)
                 .secure(false)
                 .path("/")
-                .maxAge(Duration.ofDays(1))
+                .maxAge(Duration.ofMillis(accessTokenExpiration))
                 .sameSite("Lax")
                 .build();
         ResponseCookie refreshCookie = ResponseCookie.from("refreshToken", refreshTokenResponse.getRefreshToken())
                 .httpOnly(true)
                 .secure(false)
                 .path("/")
-                .maxAge(Duration.ofDays(1))
+                .maxAge(Duration.ofMillis(refreshTokenExpiration))
                 .sameSite("Lax")
                 .build();
+
         response.addHeader(HttpHeaders.SET_COOKIE, jwtCookie.toString());
         response.addHeader(HttpHeaders.SET_COOKIE, refreshCookie.toString());
         return ResponseEntity.ok(HttpStatus.CREATED);
