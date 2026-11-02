@@ -1,6 +1,7 @@
 package com.example.helpdesk_saas.enums;
 
-public enum OrganizationStatus {
+public enum MembershipStatus {
     ACTIVE,
+    INACTIVE,
     SUSPENDED
 }

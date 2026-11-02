@@ -1,6 +1,7 @@
 package com.example.helpdesk_saas.exceptionhandler;
 
 import com.example.helpdesk_saas.exception.InvalidCredentialsException;
+import com.example.helpdesk_saas.exception.InvalidRefreshTokenException;
 import com.example.helpdesk_saas.exception.UserAlreadyExistException;
 import com.example.helpdesk_saas.exception.UserNotFoundException;
 
@@ -70,6 +71,15 @@ public class ExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(message);
+    }
+    @org.springframework.web.bind.annotation.ExceptionHandler(
+            InvalidRefreshTokenException.class)
+    public ResponseEntity<String> handleInvalidRefreshTokenException(
+            InvalidRefreshTokenException ex) {
+
+        return ResponseEntity
+                .status(HttpStatus.UNAUTHORIZED)
+                .body("Session expired. Please sign in again.");
     }
 
     // Generic handler for unexpected backend failures.
