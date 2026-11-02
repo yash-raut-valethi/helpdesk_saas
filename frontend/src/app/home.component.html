@@ -1,67 +1,820 @@
-<div class="home-page">
-  <header class="navbar">
-    <div class="logo"><span class="logo-icon">A</span><span>AuthApp</span></div>
-    <div class="profile-wrapper">
-      <button type="button" class="profile-button" (click)="toggleProfile()"><span class="profile-avatar">{{ userInitial }}</span><span class="profile-name">{{ userName }}</span><span class="profile-arrow">{{ isProfileOpen ? '▲' : '▼' }}</span></button>
-      <div *ngIf="isProfileOpen" class="profile-menu">
-        <div class="profile-info"><div class="profile-avatar large">{{ userInitial }}</div><div><strong>{{ userName }}</strong><span>{{ userEmail }}</span></div></div>
-        <div class="menu-divider"></div>
-        <button type="button" class="view-profile-button" (click)="viewProfile()">View Profile</button>
 
-        <button
-          type="button"
-          class="logout-button"
-          (click)="logout()"
-          [disabled]="isLoggingOut"
-          [attr.aria-busy]="isLoggingOut"
-        >
-          {{ isLoggingOut ? 'Signing out...' : 'Logout' }}
-        </button>
-        <p *ngIf="logoutError" class="logout-error" role="alert">
-          {{ logoutError }}
-        </p>
+<div class="home-page">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" [class.sidebar-open]="isSidebarOpen">
+
+    <div class="sidebar-brand">
+      <div class="brand-symbol">
+        <svg viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 5h16v11H9l-5 4V5Z"/>
+          <path d="M8 9h8M8 13h5"/>
+        </svg>
+      </div>
+
+      <span>HelpDesk<span class="brand-dot">.</span></span>
+
+      <button type="button" class="sidebar-close"
+              (click)="isSidebarOpen = false"
+              aria-label="Close navigation">×</button>
+    </div>
+
+    <div class="workspace-caption">WORKSPACE</div>
+
+    <div class="workspace-switch">
+      <div class="workspace-avatar">
+        {{ activeOrganization ? activeOrganization.charAt(0).toUpperCase() : '+' }}
+      </div>
+      <div class="workspace-text">
+        <strong>{{ activeOrganization || 'No organization yet' }}</strong>
+        <small>
+          {{ activeOrganization ? 'Current workspace' : 'Get started below' }}
+        </small>
       </div>
     </div>
-  </header>
 
-  <div *ngIf="isProfileModalOpen" class="profile-modal-overlay" (click)="closeProfile()">
-    <section class="profile-modal" role="dialog" aria-modal="true" aria-labelledby="profile-modal-title" (click)="$event.stopPropagation()">
-      <div class="profile-modal-header"><div><span class="section-label">YOUR ACCOUNT</span><h2 id="profile-modal-title">View Profile</h2></div><button type="button" class="profile-close-button" aria-label="Close profile" (click)="closeProfile()">&times;</button></div>
-      <ng-container *ngIf="isProfileLoading"><p class="profile-status">Loading profile details...</p></ng-container>
-      <ng-container *ngIf="!isProfileLoading && profileError"><div class="profile-error">{{ profileError }}</div><button type="button" class="profile-retry-button" (click)="viewProfile()">Try Again</button></ng-container>
-      <ng-container *ngIf="!isProfileLoading && !profileError && profileDetails"><div class="profile-modal-content"><div class="profile-modal-avatar">{{ profileInitial }}</div><div *ngFor="let field of profileFields" class="profile-detail-row"><span class="profile-detail-label">{{ field.label }}</span><strong class="profile-detail-value">{{ field.value }}</strong></div></div></ng-container>
+    <div class="sidebar-label">GENERAL</div>
 
+    <nav class="side-nav" aria-label="Main navigation">
+      <button
+        *ngFor="let item of generalNavigation"
+        type="button"
+        class="nav-link"
+        [class.active]="activeSection === item.id"
+        (click)="selectSection(item.id)"
+      >
+        <span class="nav-icon">{{ item.icon }}</span>
+        <span>{{ item.label }}</span>
+        <span *ngIf="item.id !== 'overview'" class="soon-dot"></span>
+      </button>
+    </nav>
+
+    <div class="sidebar-label admin-label">MANAGEMENT</div>
+
+    <nav class="side-nav" aria-label="Management navigation">
+      <button
+        *ngFor="let item of managementNavigation"
+        type="button"
+        class="nav-link"
+        [class.active]="activeSection === item.id"
+        (click)="selectSection(item.id)"
+      >
+        <span class="nav-icon">{{ item.icon }}</span>
+        <span>{{ item.label }}</span>
+        <span *ngIf="item.id !== 'organizations'" class="soon-dot"></span>
+      </button>
+    </nav>
+
+    <div class="sidebar-bottom">
+      <div class="sidebar-help">
+        <strong>Build your support workspace</strong>
+        <p>
+          Start with an organization, then invite your team
+          and manage tickets.
+        </p>
+        <span>Setup in progress</span>
+      </div>
+
+      <div class="sidebar-user">
+        <div class="profile-avatar">{{ userInitial }}</div>
+        <div>
+          <strong>{{ userName }}</strong>
+          <small>{{ userEmail || 'Signed in' }}</small>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <div
+    *ngIf="isSidebarOpen"
+    class="mobile-scrim"
+    (click)="isSidebarOpen = false"
+  ></div>
+
+  <!-- MAIN APPLICATION -->
+  <div class="main-shell">
+
+    <header class="topbar">
+      <div class="topbar-left">
+        <button type="button" class="mobile-menu"
+                aria-label="Open navigation"
+                (click)="isSidebarOpen = true">☰</button>
+
+        <span class="breadcrumb">Workspace</span>
+        <span class="breadcrumb-separator">/</span>
+        <strong>{{ sectionTitle }}</strong>
+      </div>
+
+      <div class="topbar-right">
+        <span class="topbar-status">
+          <span class="status-indicator"></span>
+          HelpDesk workspace
+        </span>
+
+        <div class="profile-wrapper">
+          <button
+            type="button"
+            class="profile-button"
+            (click)="toggleProfile()"
+            [attr.aria-expanded]="isProfileOpen"
+          >
+            <span class="profile-avatar">{{ userInitial }}</span>
+            <span class="profile-name">{{ userName }}</span>
+            <span class="profile-arrow">⌄</span>
+          </button>
+
+          <div *ngIf="isProfileOpen" class="profile-menu">
+            <div class="profile-info">
+              <div class="profile-avatar large">{{ userInitial }}</div>
+              <div>
+                <strong>{{ userName }}</strong>
+                <span>{{ userEmail }}</span>
+              </div>
+            </div>
+
+            <div class="menu-divider"></div>
+
+            <button type="button" class="view-profile-button"
+                    (click)="viewProfile()">
+              View profile
+            </button>
+
+            <button type="button" class="logout-button"
+                    (click)="logout()"
+                    [disabled]="isLoggingOut">
+              {{ isLoggingOut ? 'Signing out...' : 'Sign out' }}
+            </button>
+
+            <p *ngIf="logoutError" class="logout-error" role="alert">
+              {{ logoutError }}
+            </p>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="dashboard-content">
+
+      <!-- OVERVIEW -->
+      <ng-container *ngIf="activeSection === 'overview'">
+
+        <div class="page-heading">
+          <div>
+            <div class="eyebrow">HELPDESK / OVERVIEW</div>
+            <h1>Welcome back, {{ userName }} <span class="wave">✳</span></h1>
+            <p>Here's your support workspace at a glance.</p>
+          </div>
+
+          <button type="button" class="primary-action"
+                  (click)="activeOrganization
+                    ? selectSection('tickets')
+                    : openOrganizationForm()">
+            {{ activeOrganization ? 'View tickets' : 'Create organization' }}
+            <span>→</span>
+          </button>
+        </div>
+
+        <section *ngIf="!activeOrganization" class="onboarding-banner">
+          <div class="onboarding-icon">✦</div>
+
+          <div>
+            <span class="banner-tag">GETTING STARTED</span>
+            <h2>Create your first organization</h2>
+            <p>
+              Set up your organization's support workspace.
+              You will become its initial administrator.
+            </p>
+
+            <button type="button" class="banner-action"
+                    (click)="openOrganizationForm()">
+              Create Organization →
+            </button>
+          </div>
+
+          <div class="banner-decoration" aria-hidden="true">◎</div>
+        </section>
+
+        <section *ngIf="activeOrganization" class="active-workspace-banner">
+          <div class="workspace-banner-avatar">
+            {{ activeOrganization.charAt(0).toUpperCase() }}
+          </div>
+
+          <div>
+            <span class="banner-tag">CURRENT WORKSPACE</span>
+            <h2>{{ activeOrganization }}</h2>
+            <p>Your organization was created successfully.</p>
+          </div>
+
+          <button type="button" class="outline-button"
+                  (click)="selectSection('organizations')">
+            View organization
+          </button>
+        </section>
+
+        <div class="section-heading">
+          <div>
+            <h2>Ticket overview</h2>
+            <p>
+              Organization-scoped support metrics will appear here
+              once the ticket APIs are connected.
+            </p>
+          </div>
+          <span class="data-label">Awaiting ticket data</span>
+        </div>
+
+        <div class="metric-grid">
+          <article class="metric-card" *ngFor="let metric of metrics">
+            <div class="metric-top">
+              <span class="metric-icon" [ngClass]="metric.tone">
+                {{ metric.icon }}
+              </span>
+              <span class="metric-label">{{ metric.label }}</span>
+            </div>
+
+            <div class="metric-value">—</div>
+            <p>{{ metric.description }}</p>
+          </article>
+        </div>
+
+        <div class="dashboard-grid">
+
+          <section class="panel recent-panel">
+            <div class="panel-heading">
+              <div>
+                <h2>Recent tickets</h2>
+                <p>Track and manage support requests in one place.</p>
+              </div>
+              <span class="subtle-pill">Not connected</span>
+            </div>
+
+            <div class="empty-state">
+              <div class="empty-icon">▤</div>
+              <h3>No ticket data available</h3>
+              <p>
+                When ticket APIs are implemented, recent tickets,
+                priorities, assignees and statuses will appear here.
+              </p>
+
+              <button type="button" class="outline-button"
+                      (click)="selectSection('tickets')">
+                Explore tickets →
+              </button>
+            </div>
+          </section>
+
+          <section class="panel quick-panel">
+            <div class="panel-heading">
+              <div>
+                <h2>Workspace setup</h2>
+                <p>Your HelpDesk rollout checklist</p>
+              </div>
+            </div>
+
+            <div class="setup-step"
+                 *ngFor="let step of setupSteps; let i = index">
+              <div class="step-number"
+                   [class.step-complete]="i === 0 && !!activeOrganization">
+                {{ i === 0 && activeOrganization ? '✓' : i + 1 }}
+              </div>
+
+              <div>
+                <strong>{{ step.title }}</strong>
+                <p>{{ step.description }}</p>
+              </div>
+            </div>
+
+            <button type="button" class="outline-button setup-action"
+                    (click)="activeOrganization
+                      ? selectSection('organizations')
+                      : openOrganizationForm()">
+              {{ activeOrganization ? 'Manage workspace' : 'Get started' }} →
+            </button>
+          </section>
+        </div>
+      </ng-container>
+
+      <!-- ORGANIZATIONS -->
+      <ng-container *ngIf="activeSection === 'organizations'">
+
+        <div class="page-heading">
+          <div>
+            <div class="eyebrow">HELPDESK / ORGANIZATIONS</div>
+            <h1>Organizations</h1>
+            <p>Create and manage your support workspaces.</p>
+          </div>
+
+          <button type="button" class="primary-action"
+                  (click)="openOrganizationForm()">
+            + Create Organization
+          </button>
+        </div>
+
+        <section class="panel organization-panel">
+
+          <ng-container *ngIf="createdOrganization; else noOrganization">
+            <div class="organization-summary">
+              <div class="organization-summary-avatar">
+                {{ (createdOrganization.name || activeOrganization || 'O').charAt(0).toUpperCase() }}
+              </div>
+
+              <div>
+                <h2>
+                  {{ createdOrganization.name || activeOrganization }}
+                </h2>
+                <p>
+                  {{ createdOrganization.description || 'Your support workspace' }}
+                </p>
+
+                <span class="organization-created-label">
+                  Created successfully
+                </span>
+
+                <p *ngIf="createdOrganization.slug">
+                  Slug: {{ createdOrganization.slug }}
+                </p>
+              </div>
+            </div>
+          </ng-container>
+
+          <ng-template #noOrganization>
+            <div class="empty-state">
+              <div class="empty-icon">▧</div>
+              <h3>No organization created in this session</h3>
+              <p>
+                Create an organization to get started.
+                Previously created organizations will be listed
+                once the organization listing API is available.
+              </p>
+
+              <button type="button" class="primary-action"
+                      (click)="openOrganizationForm()">
+                Create Organization
+              </button>
+            </div>
+          </ng-template>
+
+        </section>
+      </ng-container>
+
+      <!-- FUTURE FEATURE SCREENS -->
+      <ng-container *ngIf="
+        activeSection !== 'overview' &&
+        activeSection !== 'organizations'
+      ">
+        <div class="page-heading">
+          <div>
+            <div class="eyebrow">HELPDESK / WORKSPACE</div>
+            <h1>{{ sectionTitle }}</h1>
+            <p>{{ sectionDescription }}</p>
+          </div>
+          <span class="coming-badge">Planned feature</span>
+        </div>
+
+        <section class="panel upcoming-panel">
+          <div class="empty-icon">◇</div>
+          <h2>{{ sectionTitle }}</h2>
+          <p>
+            This workspace section is prepared for future
+            backend integration. No demo data is being shown.
+          </p>
+
+          <button type="button" class="outline-button"
+                  (click)="selectSection('overview')">
+            Return to overview →
+          </button>
+        </section>
+      </ng-container>
+
+    </main>
+  </div>
+
+  <!-- ORGANIZATION CREATION MODAL -->
+  <div *ngIf="isOrganizationFormOpen"
+       class="organization-modal-overlay"
+       (click)="closeOrganizationForm()">
+
+    <section class="organization-modal"
+             role="dialog"
+             aria-modal="true"
+             aria-labelledby="organization-modal-title"
+             (click)="$event.stopPropagation()">
+
+      <div class="organization-modal-header">
+        <div>
+          <span class="eyebrow">NEW WORKSPACE</span>
+          <h2 id="organization-modal-title">Create organization</h2>
+          <p>Set up a new support workspace for your team.</p>
+        </div>
+
+        <button type="button" class="organization-close"
+                aria-label="Close organization form"
+                [disabled]="isCreatingOrganization"
+                (click)="closeOrganizationForm()">×</button>
+      </div>
+
+      <form [formGroup]="organizationForm"
+            (ngSubmit)="createOrganization()" novalidate>
+
+        <div *ngIf="organizationError"
+             class="organization-error" role="alert">
+          {{ organizationError }}
+        </div>
+
+        <div class="organization-form-grid">
+
+          <div class="organization-field full-width">
+            <label for="org-name">
+              Organization name <span>*</span>
+            </label>
+            <input id="org-name" formControlName="name"
+                   placeholder="e.g. Acme Technologies"
+                   maxlength="120" />
+
+            <small class="field-error"
+                   *ngIf="organizationForm.controls.name.touched &&
+                          organizationForm.controls.name.invalid">
+              Please enter a valid organization name.
+            </small>
+          </div>
+
+          <div class="organization-field full-width">
+            <label for="org-slug">
+              Organization slug <span>*</span>
+            </label>
+            <input id="org-slug" formControlName="slug"
+                   placeholder="e.g. acme-technologies" />
+
+            <small>
+              Lowercase letters, numbers and hyphens only.
+            </small>
+            <small class="field-error"
+                   *ngIf="organizationForm.controls.slug.touched &&
+                          organizationForm.controls.slug.invalid">
+              Please enter a valid slug.
+            </small>
+          </div>
+
+          <div class="organization-field full-width">
+            <label for="org-description">Description</label>
+            <textarea id="org-description"
+                      formControlName="description" rows="3"
+                      placeholder="Tell us about your organization">
+            </textarea>
+          </div>
+
+          <div class="organization-field">
+            <label for="org-email">Contact email</label>
+            <input id="org-email" type="email"
+                   formControlName="contactEmail"
+                   placeholder="support@example.com" />
+
+            <small class="field-error"
+                   *ngIf="organizationForm.controls.contactEmail.touched &&
+                          organizationForm.controls.contactEmail.invalid">
+              Enter a valid email address.
+            </small>
+          </div>
+
+          <div class="organization-field">
+            <label for="org-phone">Contact phone</label>
+            <input id="org-phone" type="tel"
+                   formControlName="contactPhone"
+                   placeholder="+91 9876543210" />
+          </div>
+
+          <div class="organization-field">
+            <label for="org-website">Website URL</label>
+            <input id="org-website" type="url"
+                   formControlName="websiteUrl"
+                   placeholder="https://example.com" />
+          </div>
+
+          <div class="organization-field">
+            <label for="org-logo">Logo URL</label>
+            <input id="org-logo" type="url"
+                   formControlName="logoUrl"
+                   placeholder="https://example.com/logo.png" />
+          </div>
+
+          <div class="organization-field full-width">
+            <label for="org-address">Address</label>
+            <textarea id="org-address"
+                      formControlName="address" rows="2"
+                      placeholder="Organization address">
+            </textarea>
+          </div>
+
+        </div>
+
+        <div class="organization-form-footer">
+          <button type="button" class="organization-cancel"
+                  [disabled]="isCreatingOrganization"
+                  (click)="closeOrganizationForm()">
+            Cancel
+          </button>
+
+          <button type="submit" class="organization-submit"
+                  [disabled]="isCreatingOrganization">
+            {{ isCreatingOrganization
+            ? 'Creating organization...'
+            : 'Create Organization' }}
+          </button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <!-- EXISTING PROFILE MODAL -->
+  <div *ngIf="isProfileModalOpen"
+       class="profile-modal-overlay"
+       (click)="closeProfile()">
+
+    <section class="profile-modal"
+             role="dialog" aria-modal="true"
+             aria-labelledby="profile-modal-title"
+             (click)="$event.stopPropagation()">
+
+      <div class="profile-modal-header">
+        <div>
+          <span class="section-label">YOUR ACCOUNT</span>
+          <h2 id="profile-modal-title">View Profile</h2>
+        </div>
+
+        <button type="button" class="profile-close-button"
+                aria-label="Close profile"
+                (click)="closeProfile()">×</button>
+      </div>
+
+      <ng-container *ngIf="isProfileLoading">
+        <p class="profile-status">Loading profile details...</p>
+      </ng-container>
+
+      <ng-container *ngIf="!isProfileLoading && profileError">
+        <div class="profile-error">{{ profileError }}</div>
+        <button type="button" class="profile-retry-button"
+                (click)="viewProfile()">Try Again</button>
+      </ng-container>
+
+      <ng-container *ngIf="
+        !isProfileLoading &&
+        !profileError &&
+        profileDetails
+      ">
+        <div class="profile-modal-content">
+          <div class="profile-modal-avatar">
+            {{ profileInitial }}
+          </div>
+
+          <div *ngFor="let field of profileFields"
+               class="profile-detail-row">
+            <span class="profile-detail-label">
+              {{ field.label }}
+            </span>
+            <strong class="profile-detail-value">
+              {{ field.value }}
+            </strong>
+          </div>
+        </div>
+      </ng-container>
+
+      <!-- PASSWORD & SECURITY -->
       <div class="password-reset-section">
-        <div class="password-reset-heading"><div class="password-reset-heading-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg></div><div><h3>Password &amp; security</h3><p>Verify your current password before choosing a new one.</p></div></div>
-        <div *ngIf="resetPasswordSuccess" class="password-reset-success" role="status"><span>{{ resetPasswordSuccess }}</span></div>
-        <button *ngIf="!isPasswordResetOpen && !resetPasswordSuccess" type="button" class="password-reset-submit" (click)="startPasswordReset()">Change password</button>
-        <button *ngIf="resetPasswordSuccess" type="button" class="password-reset-submit" (click)="startPasswordReset()">Change password again</button>
+        <div class="password-reset-heading">
+          <div class="password-reset-heading-icon">
+            <svg viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="1.7"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <rect x="4" y="10" width="16" height="11" rx="2"/>
+              <path d="M8 10V7a4 4 0 0 1 8 0v3"/>
+            </svg>
+          </div>
 
-        <form *ngIf="isPasswordResetOpen && !isCurrentPasswordVerified" class="password-reset-form" [formGroup]="currentPasswordForm" (ngSubmit)="verifyCurrentPassword()" novalidate>
-          <div class="password-reset-field"><label for="currentPassword">Current password</label><div class="password-reset-input-wrap"><svg class="password-reset-field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg><input id="currentPassword" [type]="showCurrentPassword ? 'text' : 'password'" formControlName="currentPassword" placeholder="Enter your current password" autocomplete="current-password" [attr.aria-invalid]="currentPasswordForm.controls.currentPassword.touched && currentPasswordForm.controls.currentPassword.invalid" (input)="currentPasswordError = ''"><button type="button" class="password-reset-visibility" (click)="showCurrentPassword = !showCurrentPassword" [attr.aria-label]="showCurrentPassword ? 'Hide current password' : 'Show current password'"><svg *ngIf="!showCurrentPassword" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"></path><circle cx="12" cy="12" r="3"></circle></svg><svg *ngIf="showCurrentPassword" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 3 18 18"></path><path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"></path><path d="M9.9 5.2A10.8 10.8 0 0 1 12 5c6.5 0 10 7 10 7a15 15 0 0 1-4 4.7"></path><path d="M6.2 6.2C3.5 8 2 12 2 12s3.5 7 10 7c1.1 0 2.1-.2 3-.5"></path></svg></button></div><p class="field-error" *ngIf="currentPasswordForm.controls.currentPassword.touched && currentPasswordForm.controls.currentPassword.hasError('required')">Current password is required.</p></div>
-          <div *ngIf="currentPasswordError" class="password-reset-error" role="alert"><span>{{ currentPasswordError }}</span></div>
-          <button type="submit" class="password-reset-submit" [disabled]="isVerifyingCurrentPassword"><span *ngIf="isVerifyingCurrentPassword" class="password-reset-spinner"></span>{{ isVerifyingCurrentPassword ? 'Verifying...' : 'Verify current password' }}</button><button type="button" class="password-reset-cancel" (click)="closePasswordReset()">Cancel</button>
+          <div>
+            <h3>Password &amp; security</h3>
+            <p>
+              Verify your current password before choosing a new one.
+            </p>
+          </div>
+        </div>
+
+        <div *ngIf="resetPasswordSuccess"
+             class="password-reset-success" role="status">
+          <span>{{ resetPasswordSuccess }}</span>
+        </div>
+
+        <button
+          *ngIf="!isPasswordResetOpen"
+          type="button"
+          class="password-reset-submit"
+          (click)="startPasswordReset()"
+        >
+          {{ resetPasswordSuccess
+          ? 'Change password again'
+          : 'Change password' }}
+        </button>
+
+        <!-- VERIFY CURRENT PASSWORD -->
+        <form *ngIf="
+          isPasswordResetOpen &&
+          !isCurrentPasswordVerified
+        "
+              class="password-reset-form"
+              [formGroup]="currentPasswordForm"
+              (ngSubmit)="verifyCurrentPassword()"
+              novalidate>
+
+          <div class="password-reset-field">
+            <label for="currentPassword">Current password</label>
+
+            <div class="password-reset-input-wrap">
+              <input id="currentPassword"
+                     [type]="showCurrentPassword ? 'text' : 'password'"
+                     formControlName="currentPassword"
+                     placeholder="Enter your current password"
+                     autocomplete="current-password"
+                     (input)="currentPasswordError = ''" />
+
+              <button type="button"
+                      class="password-reset-visibility"
+                      (click)="showCurrentPassword = !showCurrentPassword">
+                {{ showCurrentPassword ? 'Hide' : 'Show' }}
+              </button>
+            </div>
+
+            <p class="field-error"
+               *ngIf="
+                 currentPasswordForm.controls.currentPassword.touched &&
+                 currentPasswordForm.controls.currentPassword.hasError('required')
+               ">
+              Current password is required.
+            </p>
+          </div>
+
+          <div *ngIf="currentPasswordError"
+               class="password-reset-error" role="alert">
+            {{ currentPasswordError }}
+          </div>
+
+          <button type="submit" class="password-reset-submit"
+                  [disabled]="isVerifyingCurrentPassword">
+            {{ isVerifyingCurrentPassword
+            ? 'Verifying...'
+            : 'Verify current password' }}
+          </button>
+
+          <button type="button" class="password-reset-cancel"
+                  (click)="closePasswordReset()">
+            Cancel
+          </button>
         </form>
 
-        <form *ngIf="isPasswordResetOpen && isCurrentPasswordVerified" class="password-reset-form" [formGroup]="resetPasswordForm" (ngSubmit)="resetPassword()" novalidate>
-          <div class="password-reset-success" role="status"><span>Current password verified. You can now set a new password.</span></div>
-          <div class="password-reset-field"><label for="newPassword">New password</label><div class="password-reset-input-wrap"><svg class="password-reset-field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg><input id="newPassword" [type]="showNewPassword ? 'text' : 'password'" formControlName="password" placeholder="Enter your new password" autocomplete="new-password" [attr.aria-invalid]="newPasswordControl.touched && newPasswordControl.invalid" (input)="resetPasswordError = ''; resetPasswordSuccess = ''"><button type="button" class="password-reset-visibility" (click)="showNewPassword = !showNewPassword" [attr.aria-label]="showNewPassword ? 'Hide new password' : 'Show new password'"><svg *ngIf="!showNewPassword" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"></path><circle cx="12" cy="12" r="3"></circle></svg><svg *ngIf="showNewPassword" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 3 18 18"></path><path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"></path><path d="M9.9 5.2A10.8 10.8 0 0 1 12 5c6.5 0 10 7 10 7a15 15 0 0 1-4 4.7"></path><path d="M6.2 6.2C3.5 8 2 12 2 12s3.5 7 10 7c1.1 0 2.1-.2 3-.5"></path></svg></button></div>
-            <p class="field-error" *ngIf="newPasswordControl.touched && newPasswordControl.hasError('required')">New password is required.</p><p class="field-error" *ngIf="newPasswordControl.touched && newPasswordControl.hasError('pattern')">Please meet all the password requirements below.</p>
-            <div class="password-reset-requirements" id="password-requirements"><p class="password-reset-requirements-title">Your password must contain:</p><div [class.requirement-met]="hasPasswordRequirement('length')"><span>✓</span> At least 8 characters</div><div [class.requirement-met]="hasPasswordRequirement('uppercase')"><span>✓</span> At least 2 uppercase letters (A–Z)</div><div [class.requirement-met]="hasPasswordRequirement('lowercase')"><span>✓</span> At least 3 lowercase letters (a–z)</div><div [class.requirement-met]="hasPasswordRequirement('number')"><span>✓</span> At least 2 numbers (0–9)</div><div [class.requirement-met]="hasPasswordRequirement('special')"><span>✓</span> At least 1 special character (!@#$&amp;*)</div></div></div>
-          <div class="password-reset-field"><label for="confirmPassword">Confirm new password</label><div class="password-reset-input-wrap"><svg class="password-reset-field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg><input id="confirmPassword" [type]="showConfirmPassword ? 'text' : 'password'" formControlName="confirmPassword" placeholder="Re-enter your new password" autocomplete="new-password" [attr.aria-invalid]="confirmPasswordControl.touched && (confirmPasswordControl.invalid || (!!confirmPasswordControl.value && !passwordsMatch))" (input)="resetPasswordError = ''; resetPasswordSuccess = ''"><button type="button" class="password-reset-visibility" (click)="showConfirmPassword = !showConfirmPassword" [attr.aria-label]="showConfirmPassword ? 'Hide confirmation password' : 'Show confirmation password'"><svg *ngIf="!showConfirmPassword" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"></path><circle cx="12" cy="12" r="3"></circle></svg><svg *ngIf="showConfirmPassword" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 3 18 18"></path><path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"></path><path d="M9.9 5.2A10.8 10.8 0 0 1 12 5c6.5 0 10 7 10 7a15 15 0 0 1-4 4.7"></path><path d="M6.2 6.2C3.5 8 2 12 2 12s3.5 7 10 7c1.1 0 2.1-.2 3-.5"></path></svg></button></div><p class="field-error" *ngIf="confirmPasswordControl.touched && confirmPasswordControl.hasError('required')">Please confirm your new password.</p><p class="field-error" *ngIf="confirmPasswordControl.touched && confirmPasswordControl.value && !passwordsMatch">Passwords do not match.</p><p class="field-success" *ngIf="confirmPasswordControl.touched && passwordsMatch">Passwords match.</p></div>
-          <div *ngIf="resetPasswordError" class="password-reset-error" role="alert"><span>{{ resetPasswordError }}</span></div><div *ngIf="resetPasswordSuccess" class="password-reset-success" role="status"><span>{{ resetPasswordSuccess }}</span></div>
-          <button type="submit" class="password-reset-submit" [disabled]="isResettingPassword"><span *ngIf="isResettingPassword" class="password-reset-spinner"></span>{{ isResettingPassword ? 'Updating password...' : 'Update password' }}</button><p class="password-reset-note">Your new password is validated before being submitted.</p><button type="button" class="password-reset-cancel" (click)="closePasswordReset()">Cancel</button>
+        <!-- SET NEW PASSWORD -->
+        <form *ngIf="
+          isPasswordResetOpen &&
+          isCurrentPasswordVerified
+        "
+              class="password-reset-form"
+              [formGroup]="resetPasswordForm"
+              (ngSubmit)="resetPassword()"
+              novalidate>
+
+          <div class="password-reset-success" role="status">
+            Current password verified.
+            You can now set a new password.
+          </div>
+
+          <div class="password-reset-field">
+            <label for="newPassword">New password</label>
+
+            <div class="password-reset-input-wrap">
+              <input id="newPassword"
+                     [type]="showNewPassword ? 'text' : 'password'"
+                     formControlName="password"
+                     placeholder="Enter your new password"
+                     autocomplete="new-password"
+                     (input)="resetPasswordError = ''" />
+
+              <button type="button"
+                      class="password-reset-visibility"
+                      (click)="showNewPassword = !showNewPassword">
+                {{ showNewPassword ? 'Hide' : 'Show' }}
+              </button>
+            </div>
+
+            <p class="field-error"
+               *ngIf="
+                 newPasswordControl.touched &&
+                 newPasswordControl.hasError('required')
+               ">
+              New password is required.
+            </p>
+
+            <p class="field-error"
+               *ngIf="
+                 newPasswordControl.touched &&
+                 newPasswordControl.hasError('pattern')
+               ">
+              Please meet all password requirements below.
+            </p>
+
+            <div class="password-reset-requirements">
+              <p class="password-reset-requirements-title">
+                Your password must contain:
+              </p>
+
+              <div [class.requirement-met]="hasPasswordRequirement('length')">
+                <span>✓</span> At least 8 characters
+              </div>
+
+              <div [class.requirement-met]="hasPasswordRequirement('uppercase')">
+                <span>✓</span> At least 2 uppercase letters
+              </div>
+
+              <div [class.requirement-met]="hasPasswordRequirement('lowercase')">
+                <span>✓</span> At least 3 lowercase letters
+              </div>
+
+              <div [class.requirement-met]="hasPasswordRequirement('number')">
+                <span>✓</span> At least 2 numbers
+              </div>
+
+              <div [class.requirement-met]="hasPasswordRequirement('special')">
+                <span>✓</span> At least 1 special character (!@#$&amp;*)
+              </div>
+            </div>
+          </div>
+
+          <div class="password-reset-field">
+            <label for="confirmPassword">
+              Confirm new password
+            </label>
+
+            <div class="password-reset-input-wrap">
+              <input id="confirmPassword"
+                     [type]="showConfirmPassword ? 'text' : 'password'"
+                     formControlName="confirmPassword"
+                     placeholder="Re-enter your new password"
+                     autocomplete="new-password"
+                     (input)="resetPasswordError = ''" />
+
+              <button type="button"
+                      class="password-reset-visibility"
+                      (click)="showConfirmPassword = !showConfirmPassword">
+                {{ showConfirmPassword ? 'Hide' : 'Show' }}
+              </button>
+            </div>
+
+            <p class="field-error"
+               *ngIf="
+                 confirmPasswordControl.touched &&
+                 confirmPasswordControl.hasError('required')
+               ">
+              Please confirm your new password.
+            </p>
+
+            <p class="field-error"
+               *ngIf="
+                 confirmPasswordControl.touched &&
+                 confirmPasswordControl.value &&
+                 !passwordsMatch
+               ">
+              Passwords do not match.
+            </p>
+
+            <p class="field-success"
+               *ngIf="
+                 confirmPasswordControl.touched &&
+                 passwordsMatch
+               ">
+              Passwords match.
+            </p>
+          </div>
+
+          <div *ngIf="resetPasswordError"
+               class="password-reset-error" role="alert">
+            {{ resetPasswordError }}
+          </div>
+
+          <button type="submit" class="password-reset-submit"
+                  [disabled]="isResettingPassword">
+            {{ isResettingPassword
+            ? 'Updating password...'
+            : 'Update password' }}
+          </button>
+
+          <p class="password-reset-note">
+            Your new password is validated before being submitted.
+          </p>
+
+          <button type="button" class="password-reset-cancel"
+                  (click)="closePasswordReset()">
+            Cancel
+          </button>
         </form>
       </div>
     </section>
   </div>
 
-  <main>
-    <section class="hero" [style.background-image]="'url(' + slides[currentSlide].image + ')'">
-      <div class="hero-overlay"></div><button type="button" class="slide-arrow left" (click)="previousSlide()" aria-label="Previous slide">‹</button>
-      <div class="hero-content"><p class="eyebrow">{{ slides[currentSlide].eyebrow }}</p><h1>{{ slides[currentSlide].title }}</h1><p class="hero-description">{{ slides[currentSlide].description }}</p><button type="button" class="explore-button">Explore now <span>→</span></button></div>
-      <button type="button" class="slide-arrow right" (click)="nextSlide()" aria-label="Next slide">›</button><div class="slide-controls"><button *ngFor="let slide of slides; let i = index" type="button" class="dot" [class.active]="currentSlide === i" (click)="selectSlide(i)" [attr.aria-label]="'Go to slide ' + (i + 1)"></button></div>
-    </section>
-    <section class="welcome-section"><div class="welcome-content"><span class="section-label">YOUR SPACE</span><h2>Welcome, {{ userName }}.</h2><p>You're successfully signed in. Take a moment to explore your personalized space and discover what's waiting for you.</p></div><div class="feature-grid"><div class="feature-card"><div class="feature-icon">✦</div><h3>Discover</h3><p>Find new ideas, places and experiences that inspire you.</p></div><div class="feature-card"><div class="feature-icon">◇</div><h3>Explore</h3><p>Step outside the ordinary and experience something different.</p></div><div class="feature-card"><div class="feature-icon">○</div><h3>Enjoy</h3><p>Make every moment meaningful and beautifully memorable.</p></div></div></section>
-  </main>
 </div>
