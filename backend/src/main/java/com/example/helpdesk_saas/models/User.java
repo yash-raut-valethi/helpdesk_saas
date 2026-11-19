@@ -23,7 +23,7 @@ public class User extends Basemodel{
     private String email;
     private String password;
 
-    @OneToMany(mappedBy = "user")
+    @OneToMany(mappedBy = "member")
     private List<OrganizationMembership> memberships = new ArrayList<>();
 
 }

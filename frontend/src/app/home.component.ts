@@ -37,19 +37,27 @@ export class HomeComponent implements OnInit {
   private readonly toastService = inject(ToastService);
   private readonly organizationService = inject(OrganizationService);
 
+  private readonly selectedOrganizationStorageKey = 'helpdesk.selectedOrganizationId';
+
   constructor(
     private readonly router: Router,
     private readonly profileService: ProfileService,
     private readonly cdr: ChangeDetectorRef,
   ) {}
 
-  // -----------------------------
+  // --------------------------------------------------
   // DASHBOARD
-  // -----------------------------
+  // --------------------------------------------------
 
   activeSection = 'overview';
   activeOrganization: string | null = null;
   isSidebarOpen = false;
+
+  organizations: OrganizationResponse[] = [];
+  selectedOrganization: OrganizationResponse | null = null;
+
+  isLoadingOrganizations = false;
+  organizationsError = '';
 
   readonly generalNavigation: NavigationItem[] = [
     {
@@ -183,15 +191,187 @@ export class HomeComponent implements OnInit {
     return this.selectedNavigation?.description ?? '';
   }
 
+  get hasOrganizations(): boolean {
+    return this.organizations.length > 0;
+  }
+
+  get activeOrganizationRole(): string {
+    return this.getOrganizationRoleLabel(this.selectedOrganization?.role);
+  }
+
   selectSection(section: string): void {
     this.activeSection = section;
     this.isSidebarOpen = false;
     this.isProfileOpen = false;
   }
 
-  // -----------------------------
+  // --------------------------------------------------
+  // ORGANIZATION LIST AND SELECTION
+  // --------------------------------------------------
+
+  loadOrganizations(preferredOrganization?: OrganizationResponse): void {
+    if (this.isLoadingOrganizations) {
+      return;
+    }
+
+    this.isLoadingOrganizations = true;
+    this.organizationsError = '';
+
+    this.organizationService
+      .getOrganizations()
+      .pipe(
+        finalize(() => {
+          this.isLoadingOrganizations = false;
+          this.cdr.detectChanges();
+        }),
+      )
+      .subscribe({
+        next: (response: OrganizationResponse[]) => {
+          const fetchedOrganizations = Array.isArray(response) ? response : [];
+
+          this.organizations = [...fetchedOrganizations];
+
+          // A successfully created organization is an API response,
+          // so it can be retained if the subsequent list request
+          // does not yet include it.
+          if (
+            preferredOrganization &&
+            !this.organizations.some((organization) =>
+              this.isSameOrganization(organization, preferredOrganization),
+            )
+          ) {
+            this.organizations.unshift(preferredOrganization);
+          }
+
+          this.restoreSelectedOrganization(preferredOrganization);
+          this.cdr.detectChanges();
+        },
+
+        error: (error: HttpErrorResponse) => {
+          this.organizationsError = this.getOrganizationErrorMessage(error);
+
+          // Keep the successful create response available if the
+          // follow-up listing request fails.
+          if (preferredOrganization) {
+            this.organizations = [preferredOrganization];
+            this.selectOrganization(preferredOrganization, false);
+          }
+
+          this.cdr.detectChanges();
+        },
+      });
+  }
+
+  private restoreSelectedOrganization(preferredOrganization?: OrganizationResponse): void {
+    if (preferredOrganization) {
+      const createdOrganization = this.organizations.find((organization) =>
+        this.isSameOrganization(organization, preferredOrganization),
+      );
+
+      if (createdOrganization) {
+        this.selectOrganization(createdOrganization, false);
+        return;
+      }
+    }
+
+    const storedOrganizationId = localStorage.getItem(this.selectedOrganizationStorageKey);
+
+    if (storedOrganizationId) {
+      const storedOrganization = this.organizations.find(
+        (organization) => String(organization.id ?? '') === storedOrganizationId,
+      );
+
+      if (storedOrganization) {
+        this.selectOrganization(storedOrganization, false);
+        return;
+      }
+    }
+
+    if (this.organizations.length > 0) {
+      this.selectOrganization(this.organizations[0], false);
+      return;
+    }
+
+    this.selectedOrganization = null;
+    this.activeOrganization = null;
+
+    localStorage.removeItem(this.selectedOrganizationStorageKey);
+  }
+
+  selectOrganization(organization: OrganizationResponse, closeSidebar = true): void {
+    this.selectedOrganization = organization;
+    this.activeOrganization = organization.name?.trim() || 'Organization';
+
+    if (organization.id !== undefined && organization.id !== null) {
+      localStorage.setItem(this.selectedOrganizationStorageKey, String(organization.id));
+    } else {
+      localStorage.removeItem(this.selectedOrganizationStorageKey);
+    }
+
+    if (closeSidebar) {
+      this.isSidebarOpen = false;
+    }
+
+    this.cdr.detectChanges();
+  }
+
+  isSelectedOrganization(organization: OrganizationResponse): boolean {
+    if (!this.selectedOrganization) {
+      return false;
+    }
+
+    return this.isSameOrganization(this.selectedOrganization, organization);
+  }
+
+  private isSameOrganization(first: OrganizationResponse, second: OrganizationResponse): boolean {
+    if (
+      first.id !== undefined &&
+      first.id !== null &&
+      second.id !== undefined &&
+      second.id !== null
+    ) {
+      return String(first.id) === String(second.id);
+    }
+
+    if (first.slug && second.slug) {
+      return first.slug === second.slug;
+    }
+
+    return first.name === second.name;
+  }
+
+  organizationInitial(organization: OrganizationResponse): string {
+    return (organization.name?.trim().charAt(0) || 'O').toUpperCase();
+  }
+
+  getOrganizationRoleLabel(role?: string): string {
+    switch ((role || '').toUpperCase()) {
+      case 'ADMIN':
+      case 'ADMINISTRATOR':
+        return 'Administrator';
+
+      case 'AGENT':
+        return 'Agent';
+
+      case 'CUSTOMER':
+        return 'Customer';
+
+      default:
+        return 'Member';
+    }
+  }
+
+  trackByOrganization(index: number, organization: OrganizationResponse): string | number {
+    return organization.id ?? organization.slug ?? organization.name ?? index;
+  }
+
+  retryLoadOrganizations(): void {
+    this.loadOrganizations();
+  }
+
+  // --------------------------------------------------
   // USER / PROFILE
-  // -----------------------------
+  // --------------------------------------------------
 
   userName = 'User';
   userEmail = '';
@@ -210,6 +390,7 @@ export class HomeComponent implements OnInit {
   ngOnInit(): void {
     this.loadUser();
     this.loadAuthenticatedUser();
+    this.loadOrganizations();
   }
 
   loadUser(): void {
@@ -337,9 +518,9 @@ export class HomeComponent implements OnInit {
       }));
   }
 
-  // -----------------------------
+  // --------------------------------------------------
   // ORGANIZATION CREATION
-  // -----------------------------
+  // --------------------------------------------------
 
   isOrganizationFormOpen = false;
   isCreatingOrganization = false;
@@ -431,8 +612,6 @@ export class HomeComponent implements OnInit {
         next: (response: OrganizationResponse) => {
           this.createdOrganization = response;
 
-          this.activeOrganization = response.name || request.name;
-
           this.isOrganizationFormOpen = false;
           this.organizationForm.reset();
 
@@ -440,8 +619,12 @@ export class HomeComponent implements OnInit {
 
           this.toastService.success(
             'Organization created successfully',
-            `${this.activeOrganization} is ready for setup.`,
+            `${response.name || request.name} is ready for setup.`,
           );
+
+          // Refresh the actual organization list and select
+          // the organization returned by the create API.
+          this.loadOrganizations(response);
 
           this.cdr.detectChanges();
         },
@@ -468,7 +651,7 @@ export class HomeComponent implements OnInit {
     }
 
     if (error.status === 403) {
-      return 'You do not have permission to create an organization.';
+      return 'You do not have permission to perform this action.';
     }
 
     if (error.status === 409) {
@@ -485,12 +668,12 @@ export class HomeComponent implements OnInit {
       return body.message;
     }
 
-    return 'Unable to create organization. Please check your details.';
+    return 'Unable to complete the organization request. Please check your details.';
   }
 
-  // -----------------------------
+  // --------------------------------------------------
   // PASSWORD RESET
-  // -----------------------------
+  // --------------------------------------------------
 
   isPasswordResetOpen = false;
   isCurrentPasswordVerified = false;
@@ -703,9 +886,9 @@ export class HomeComponent implements OnInit {
       });
   }
 
-  // -----------------------------
+  // --------------------------------------------------
   // LOGOUT
-  // -----------------------------
+  // --------------------------------------------------
 
   logout(): void {
     if (this.isLoggingOut) {
@@ -756,6 +939,7 @@ export class HomeComponent implements OnInit {
   private clearLocalSession(): void {
     localStorage.removeItem('isLoggedIn');
     localStorage.removeItem('user');
+    localStorage.removeItem(this.selectedOrganizationStorageKey);
 
     this.userName = 'User';
     this.userEmail = '';
@@ -763,6 +947,10 @@ export class HomeComponent implements OnInit {
 
     this.activeOrganization = null;
     this.createdOrganization = null;
+
+    this.organizations = [];
+    this.selectedOrganization = null;
+    this.organizationsError = '';
 
     this.isProfileOpen = false;
     this.isProfileModalOpen = false;

@@ -17,4 +17,10 @@ export class OrganizationService {
       withCredentials: true,
     });
   }
+
+  getOrganizations(): Observable<OrganizationResponse[]> {
+    return this.http.get<OrganizationResponse[]>(`${this.API_URL}/fetch/organizations`, {
+      withCredentials: true,
+    });
+  }
 }

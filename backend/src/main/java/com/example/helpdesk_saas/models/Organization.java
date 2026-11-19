@@ -53,8 +53,13 @@ public class Organization extends Basemodel{
     @Column(nullable = false)
     private Instant updatedAt;
 
-    @OneToMany(mappedBy = "organization")
+    @OneToMany(mappedBy = "organization", cascade = CascadeType.ALL,
+            orphanRemoval = true)
     private List<OrganizationMembership> memberships = new ArrayList<>();
+
+
+    @Column(name= "is_deleted", nullable=false)
+    private boolean isDeleted = false;
 
 
     @PrePersist

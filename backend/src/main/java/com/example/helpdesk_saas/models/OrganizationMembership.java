@@ -11,7 +11,7 @@ public class OrganizationMembership extends Basemodel {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
-    private User user;
+    private User member;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "organization_id", nullable = false)
@@ -19,5 +19,7 @@ public class OrganizationMembership extends Basemodel {
 
     @Enumerated(EnumType.STRING)
     private OrganizationRole role;
+
+    private boolean isDeleted = false;
 
 }

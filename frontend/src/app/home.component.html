@@ -1,4 +1,3 @@
-
 <div class="home-page">
 
   <!-- SIDEBAR -->
@@ -21,17 +20,79 @@
               aria-label="Close navigation">×</button>
     </div>
 
-    <div class="workspace-caption">WORKSPACE</div>
+    <!-- ORGANIZATION SWITCHER -->
+    <div class="organization-switcher">
 
-    <div class="workspace-switch">
-      <div class="workspace-avatar">
-        {{ activeOrganization ? activeOrganization.charAt(0).toUpperCase() : '+' }}
+      <div class="organization-switcher-heading">
+        <span class="workspace-caption">YOUR ORGANIZATIONS</span>
+
+        <button type="button"
+                class="add-organization-button"
+                aria-label="Create organization"
+                title="Create organization"
+                (click)="openOrganizationForm()">
+          +
+        </button>
       </div>
-      <div class="workspace-text">
-        <strong>{{ activeOrganization || 'No organization yet' }}</strong>
-        <small>
-          {{ activeOrganization ? 'Current workspace' : 'Get started below' }}
-        </small>
+
+      <div *ngIf="isLoadingOrganizations"
+           class="organization-list-status">
+        <span class="loading-spinner"></span>
+        Loading organizations...
+      </div>
+
+      <div *ngIf="!isLoadingOrganizations && organizationsError"
+           class="organization-list-error">
+        <p>{{ organizationsError }}</p>
+        <button type="button"
+                (click)="retryLoadOrganizations()">
+          Try again
+        </button>
+      </div>
+
+      <div *ngIf="
+        !isLoadingOrganizations &&
+        !organizationsError &&
+        organizations.length === 0
+      " class="organization-list-empty">
+        <div class="organization-empty-icon">+</div>
+        <p>No organizations yet</p>
+        <small>Create an organization to get started.</small>
+
+        <button type="button"
+                (click)="openOrganizationForm()">
+          Create organization
+        </button>
+      </div>
+
+      <div *ngIf="organizations.length > 0"
+           class="organization-switcher-list">
+
+        <button
+          *ngFor="let organization of organizations; trackBy: trackByOrganization"
+          type="button"
+          class="organization-switcher-item"
+          [class.selected]="isSelectedOrganization(organization)"
+          [attr.aria-current]="isSelectedOrganization(organization) ? 'true' : null"
+          (click)="selectOrganization(organization)"
+        >
+          <span class="organization-switcher-avatar">
+            {{ organizationInitial(organization) }}
+          </span>
+
+          <span class="organization-switcher-details">
+            <strong>{{ organization.name || 'Unnamed organization' }}</strong>
+            <small>
+              {{ getOrganizationRoleLabel(organization.role) }}
+            </small>
+          </span>
+
+          <span *ngIf="isSelectedOrganization(organization)"
+                class="organization-selected-indicator"
+                aria-label="Selected organization">
+            ✓
+          </span>
+        </button>
       </div>
     </div>
 
@@ -168,15 +229,15 @@
           </div>
 
           <button type="button" class="primary-action"
-                  (click)="activeOrganization
+                  (click)="selectedOrganization
                     ? selectSection('tickets')
                     : openOrganizationForm()">
-            {{ activeOrganization ? 'View tickets' : 'Create organization' }}
+            {{ selectedOrganization ? 'View tickets' : 'Create organization' }}
             <span>→</span>
           </button>
         </div>
 
-        <section *ngIf="!activeOrganization" class="onboarding-banner">
+        <section *ngIf="!selectedOrganization" class="onboarding-banner">
           <div class="onboarding-icon">✦</div>
 
           <div>
@@ -196,20 +257,24 @@
           <div class="banner-decoration" aria-hidden="true">◎</div>
         </section>
 
-        <section *ngIf="activeOrganization" class="active-workspace-banner">
+        <section *ngIf="selectedOrganization"
+                 class="active-workspace-banner">
           <div class="workspace-banner-avatar">
-            {{ activeOrganization.charAt(0).toUpperCase() }}
+            {{ organizationInitial(selectedOrganization) }}
           </div>
 
           <div>
             <span class="banner-tag">CURRENT WORKSPACE</span>
-            <h2>{{ activeOrganization }}</h2>
-            <p>Your organization was created successfully.</p>
+            <h2>{{ selectedOrganization.name }}</h2>
+            <p>
+              Your role:
+              <strong>{{ activeOrganizationRole }}</strong>
+            </p>
           </div>
 
           <button type="button" class="outline-button"
                   (click)="selectSection('organizations')">
-            View organization
+            View organizations
           </button>
         </section>
 
@@ -275,8 +340,8 @@
             <div class="setup-step"
                  *ngFor="let step of setupSteps; let i = index">
               <div class="step-number"
-                   [class.step-complete]="i === 0 && !!activeOrganization">
-                {{ i === 0 && activeOrganization ? '✓' : i + 1 }}
+                   [class.step-complete]="i === 0 && !!selectedOrganization">
+                {{ i === 0 && selectedOrganization ? '✓' : i + 1 }}
               </div>
 
               <div>
@@ -286,10 +351,10 @@
             </div>
 
             <button type="button" class="outline-button setup-action"
-                    (click)="activeOrganization
+                    (click)="selectedOrganization
                       ? selectSection('organizations')
                       : openOrganizationForm()">
-              {{ activeOrganization ? 'Manage workspace' : 'Get started' }} →
+              {{ selectedOrganization ? 'Manage workspace' : 'Get started' }} →
             </button>
           </section>
         </div>
@@ -313,47 +378,107 @@
 
         <section class="panel organization-panel">
 
-          <ng-container *ngIf="createdOrganization; else noOrganization">
-            <div class="organization-summary">
-              <div class="organization-summary-avatar">
-                {{ (createdOrganization.name || activeOrganization || 'O').charAt(0).toUpperCase() }}
-              </div>
-
-              <div>
-                <h2>
-                  {{ createdOrganization.name || activeOrganization }}
-                </h2>
-                <p>
-                  {{ createdOrganization.description || 'Your support workspace' }}
-                </p>
-
-                <span class="organization-created-label">
-                  Created successfully
-                </span>
-
-                <p *ngIf="createdOrganization.slug">
-                  Slug: {{ createdOrganization.slug }}
-                </p>
-              </div>
-            </div>
-          </ng-container>
-
-          <ng-template #noOrganization>
-            <div class="empty-state">
-              <div class="empty-icon">▧</div>
-              <h3>No organization created in this session</h3>
+          <div class="organization-list-header">
+            <div>
+              <h2>Your organizations</h2>
               <p>
-                Create an organization to get started.
-                Previously created organizations will be listed
-                once the organization listing API is available.
+                Organizations associated with your account.
               </p>
-
-              <button type="button" class="primary-action"
-                      (click)="openOrganizationForm()">
-                Create Organization
-              </button>
             </div>
-          </ng-template>
+
+            <span class="organization-count">
+              {{ organizations.length }}
+              {{ organizations.length === 1 ? 'organization' : 'organizations' }}
+            </span>
+          </div>
+
+          <div *ngIf="isLoadingOrganizations"
+               class="organization-page-status">
+            <span class="loading-spinner"></span>
+            Loading your organizations...
+          </div>
+
+          <div *ngIf="!isLoadingOrganizations && organizationsError"
+               class="organization-page-error"
+               role="alert">
+            <p>{{ organizationsError }}</p>
+            <button type="button" class="outline-button"
+                    (click)="retryLoadOrganizations()">
+              Try again
+            </button>
+          </div>
+
+          <div *ngIf="
+            !isLoadingOrganizations &&
+            !organizationsError &&
+            organizations.length === 0
+          " class="empty-state">
+            <div class="empty-icon">▧</div>
+            <h3>No organizations yet</h3>
+            <p>
+              Create an organization to establish your support
+              workspace. You will become its initial administrator.
+            </p>
+
+            <button type="button" class="primary-action"
+                    (click)="openOrganizationForm()">
+              Create Organization
+            </button>
+          </div>
+
+          <div *ngIf="organizations.length > 0"
+               class="organization-card-list">
+
+            <article
+              *ngFor="let organization of organizations; trackBy: trackByOrganization"
+              class="organization-card"
+              [class.organization-card-selected]="isSelectedOrganization(organization)"
+            >
+              <div class="organization-card-main">
+                <div class="organization-summary-avatar">
+                  {{ organizationInitial(organization) }}
+                </div>
+
+                <div class="organization-card-details">
+                  <div class="organization-card-title-row">
+                    <h3>
+                      {{ organization.name || 'Unnamed organization' }}
+                    </h3>
+
+                    <span *ngIf="isSelectedOrganization(organization)"
+                          class="current-organization-label">
+                      Current workspace
+                    </span>
+                  </div>
+
+                  <p>
+                    {{ organization.description || 'Your support workspace' }}
+                  </p>
+
+                  <div class="organization-card-meta">
+                    <span class="organization-role">
+                      {{ getOrganizationRoleLabel(organization.role) }}
+                    </span>
+
+                    <span *ngIf="organization.slug">
+                      {{ organization.slug }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                class="organization-select-button"
+                [disabled]="isSelectedOrganization(organization)"
+                (click)="selectOrganization(organization)"
+              >
+                {{ isSelectedOrganization(organization)
+                ? 'Selected'
+                : 'Switch workspace' }}
+              </button>
+            </article>
+          </div>
 
         </section>
       </ng-container>

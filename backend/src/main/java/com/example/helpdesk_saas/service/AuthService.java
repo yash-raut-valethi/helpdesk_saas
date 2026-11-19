@@ -10,6 +10,7 @@ import com.example.helpdesk_saas.models.User;
 import com.example.helpdesk_saas.repository.BlackListedAccessTokenRepository;
 import com.example.helpdesk_saas.repository.UserRepository;
 import com.example.helpdesk_saas.security.JwtService;
+import com.example.helpdesk_saas.util.EmailUtil;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -28,7 +29,8 @@ public class AuthService {
     private final BlackListedAccessTokenRepository blackListedAccessTokenRepository;
     private final StringRedisTemplate redisTemplate;
     private final MailService mailService;
-    private final SecureRandom secureRandom = new SecureRandom();
+
+
     private final RefreshTokenService refreshTokenService;
 
     public AuthService(PasswordEncoder passwordEncoder, UserRepository userRepository, JwtService jwtService, BlackListedAccessTokenRepository blackListedAccessTokenRepository,StringRedisTemplate redisTemplate,MailService mailService,RefreshTokenService refreshTokenService) {
@@ -37,12 +39,12 @@ public class AuthService {
         this.jwtService = jwtService;
         this.blackListedAccessTokenRepository = blackListedAccessTokenRepository;
         this.redisTemplate = redisTemplate;
-        this.mailService= mailService;
         this.refreshTokenService= refreshTokenService;
+        this.mailService = mailService;
     }
 
     public String registerUser(String name, String email, String password){
-        Optional<User> optionalUser = userRepository.findByEmail(email);
+        Optional<User> optionalUser = userRepository.findByEmailAndIsDeletedFalse(email);
         if(optionalUser.isPresent()){
             throw new UserAlreadyExistException("User with Email already exist.");
         }
@@ -58,7 +60,7 @@ public class AuthService {
 
     public LoginResponse loginUser(String email, String password) {
 
-        Optional<User> optionalUser = userRepository.findByEmail(email);
+        Optional<User> optionalUser = userRepository.findByEmailAndIsDeletedFalse(email);
 
         if (optionalUser.isEmpty()) {
             throw new UserNotFoundException(
@@ -98,11 +100,11 @@ public class AuthService {
 
 
     public String forgotPassword(String email){
-        Optional<User> optionalUser = userRepository.findByEmail(email.trim());
+        Optional<User> optionalUser = userRepository.findByEmailAndIsDeletedFalse(email.trim());
         if(optionalUser.isEmpty()){
             throw new UserNotFoundException("Email id not registered. Please register first.");
         }
-        String otp = generateOTP();
+        String otp = EmailUtil.generateOTP();
         redisTemplate.opsForValue().set(email, otp,  5,
                 TimeUnit.MINUTES);
         try{
@@ -118,8 +120,9 @@ public class AuthService {
 
     }
 
+
     public LoginResponse verifyLoginOTP(String email, String otp){
-       String storedOtp = redisTemplate.opsForValue().get(email);
+        String storedOtp = redisTemplate.opsForValue().get(email);
         if(storedOtp==null || !storedOtp.equals(otp)){
             throw new InvalidCredentialsException("Invalid otp. Please try again.");
         }
@@ -133,13 +136,5 @@ public class AuthService {
         return response;
     }
 
-
-    private String generateOTP(){
-        StringBuilder otp = new StringBuilder(6);
-        for(int i=1;i<=6;i++){
-            otp.append(secureRandom.nextInt(10));
-        }
-        return otp.toString();
-    }
 
 }

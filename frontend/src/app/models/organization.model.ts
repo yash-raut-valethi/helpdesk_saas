@@ -20,5 +20,10 @@ export interface OrganizationResponse {
   websiteUrl?: string;
   logoUrl?: string;
   address?: string;
+
+  // Membership role of the authenticated user in this organization.
+  // Expected values: ADMIN, AGENT, CUSTOMER.
+  role?: string;
+
   [key: string]: unknown;
 }
